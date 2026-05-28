@@ -13,7 +13,7 @@ from app.core.config import get_settings  # noqa: E402
 
 DUR_BASE = "https://apis.data.go.kr/1471000/DURPrdlstInfoService03"
 PAGE_SIZE = 500
-MAX_PAGES = 200
+MAX_PAGES = 2000
 
 ENDPOINTS: list[tuple[str, str]] = [
     ("dur_combo.csv",           "getUsjntTabooInfoList03"),
