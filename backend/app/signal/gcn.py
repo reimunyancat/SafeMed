@@ -1,23 +1,5 @@
-"""Co-medication graph metrics with optional trained-GCN embedding boost.
-
-Two modes:
-
-1. **Heuristic mode (default, no extra deps)** — The user's regimen is treated
-   as a clique; degree centrality + a saturating size term yield a per-drug
-   risk amplifier in [0, 1]. This is what runs on Railway with no ML extras.
-2. **Trained-embedding mode** — If a ``gcn_embeddings.pt`` file produced by
-   ``app.ml.train`` is available (``GCN_EMBEDDING_PATH`` env var or the default
-   ``data/processed/gcn_embeddings.pt``), we additionally boost amplifiers for
-   ingredients that sit close to each other in the learnt embedding space
-   (cosine similarity), which captures pharmacologically similar ingredients
-   that don't appear in the literal MFDS contraindication CSV.
-
-The heuristic alone is what the competition demo runs on; the trained boost
-is available for the Phase B writeup and live tuning.
-"""
 from __future__ import annotations
 
-import math
 import os
 from dataclasses import dataclass
 from functools import lru_cache
@@ -46,11 +28,7 @@ def build_clique(drugs: list[str]) -> nx.Graph:
 
 @lru_cache(maxsize=1)
 def _load_embeddings() -> tuple[dict[str, int], object] | None:
-    """Try to load a trained GCN embedding bundle; return None if unavailable.
-
-    The function is cached so repeated /analyze calls don't re-read the .pt
-    file. We import torch lazily so the runtime image without ML extras works.
-    """
+    """Try to load a trained GCN embedding bundle; return None if unavailable."""
     path_str = os.environ.get(
         "GCN_EMBEDDING_PATH", "../data/processed/gcn_embeddings.pt"
     )
@@ -69,17 +47,13 @@ def _load_embeddings() -> tuple[dict[str, int], object] | None:
 
 
 def _embedding_boost(drugs: list[str]) -> dict[str, float]:
-    """Per-drug boost in [0, 1] from cosine similarity within the regimen.
-
-    Returns zeros if no trained embeddings are loaded or none of the drugs are
-    in the vocab.
-    """
+    """Per-drug boost in [0, 1] from cosine similarity within the regimen."""
     bundle = _load_embeddings()
     if bundle is None:
         return {d: 0.0 for d in drugs}
     vocab, embeddings = bundle
     try:
-        import torch  # noqa: F401
+        import torch
     except ImportError:
         return {d: 0.0 for d in drugs}
 
@@ -96,7 +70,6 @@ def _embedding_boost(drugs: list[str]) -> dict[str, float]:
                 (embeddings[idx_a] @ embeddings[idx_b])
                 / (norms[idx_a] * norms[idx_b])
             )
-            # Map cosine [-1, 1] -> boost [0, 1], emphasising strong similarity.
             contribution = max(0.0, sim) ** 2
             boosts[drug_a] = max(boosts[drug_a], contribution)
             boosts[drug_b] = max(boosts[drug_b], contribution)
@@ -121,14 +94,12 @@ def score_drugs(
 
     centrality = nx.degree_centrality(g)
     n = len(drugs)
-    amp_base = min(1.0, (n - 1) / 6.0)  # saturates at 7+ meds
+    amp_base = min(1.0, (n - 1) / 6.0) 
     boosts = _embedding_boost(drugs)
     out: list[GCNScore] = []
     for d in drugs:
         base = float(amp_base * centrality[d])
         boost = float(boosts.get(d, 0.0))
-        # Combine multiplicatively but cap at 1.0; embedding boost can lift
-        # the amplifier by up to 50%.
         combined = min(1.0, base * (1.0 + 0.5 * boost))
         out.append(
             GCNScore(
@@ -138,6 +109,4 @@ def score_drugs(
                 embedding_boost=boost,
             )
         )
-    # silence the unused-import warning when math is only used in some paths
-    _ = math
     return out

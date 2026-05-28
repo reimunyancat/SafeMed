@@ -13,25 +13,21 @@ from app.data.ae_loader import (
 )
 from app.data.csv_loader import has_any_real_data, load_all
 from app.report import (
-    SYSTEM_PROMPT,
-    USER_PROMPT_TEMPLATE,
     call_llm,
     cautions_from_findings,
     fallback_template,
     parse_two_paragraphs,
-    render_drug_list,
-    render_findings,
     suggest_alternatives,
     to_finding_outs,
     to_risk_out,
 )
+from app.report.prompts import build_system_prompt, build_user_prompt
 from app.rules import run_rules
 from app.schemas import AnalyzeRequest, AnalyzeResponse
 from app.signal import compute_risk, score_drugs
 
 router = APIRouter()
 
-# data/raw 에서만 읽음 — sample 폴백은 제거했다.
 _PROJECT_DATA = Path(__file__).resolve().parents[2].parent / "data"
 _RAW_DIR = _PROJECT_DATA / "raw"
 
@@ -66,7 +62,6 @@ async def analyze(
         is_pregnant=req.profile.is_pregnant,
     )
 
-    # KAERS 자료가 없으면 자동으로 빈 결과 → β·γ 컴포넌트는 0 으로 떨어진다.
     ae_df = load_ae_reports(_RAW_DIR)
     prr_results = build_prr_for_drugs(item_seqs, ae_df)
     ae_freq = ae_frequency_score(item_seqs, ae_df)
@@ -86,18 +81,18 @@ async def analyze(
         {"severity": f.severity, "message": f.message, "evidence": f.evidence}
         for f in findings
     ]
-    user_prompt = USER_PROMPT_TEMPLATE.format(
-        drug_list=render_drug_list(drug_dicts),
-        age=req.profile.age,
-        is_pregnant="네" if req.profile.is_pregnant else "아니오",
-        conditions=", ".join(req.profile.conditions) or "없음",
-        findings_text=render_findings(finding_dicts),
+
+    system_prompt = build_system_prompt(req.profile)
+    user_prompt = build_user_prompt(
+        profile=req.profile,
+        drugs=drug_dicts,
+        findings=finding_dicts,
         risk_score=risk.score_0_100,
         band=risk.band,
     )
 
     try:
-        llm_text = await call_llm(SYSTEM_PROMPT, user_prompt, settings)
+        llm_text = await call_llm(system_prompt, user_prompt, settings)
     except LLMUnavailableError:
         llm_text = fallback_template()
 

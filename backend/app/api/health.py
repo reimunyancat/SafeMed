@@ -1,7 +1,6 @@
-"""Health-check endpoint."""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.core.config import get_settings
 
@@ -9,11 +8,11 @@ router = APIRouter()
 
 
 @router.get("/health")
-async def health() -> dict[str, str]:
+async def health(request: Request) -> dict[str, str]:
     """Lightweight liveness probe."""
     settings = get_settings()
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": request.app.version,
         "llm_provider": settings.llm_provider,
     }

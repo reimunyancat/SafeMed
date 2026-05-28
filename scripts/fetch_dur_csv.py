@@ -12,18 +12,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from app.core.config import get_settings  # noqa: E402
 
 DUR_BASE = "https://apis.data.go.kr/1471000/DURPrdlstInfoService03"
-PAGE_SIZE = 1000
-MAX_PAGES = 100 
+PAGE_SIZE = 500
+MAX_PAGES = 200
 
-# (저장파일명, OpenAPI 세부 operation)
 ENDPOINTS: list[tuple[str, str]] = [
-    ("dur_combo.csv", "getUsjntTabooInfoList03"),
-    ("dur_elderly.csv", "getOdsnAtentInfoList03"),
-    ("dur_pregnancy.csv", "getPwnmTabooInfoList03"),
-    ("dur_age.csv", "getSpcifyAgrdeTabooInfoList03"),
+    ("dur_combo.csv",           "getUsjntTabooInfoList03"),
+    ("dur_elderly.csv",         "getOdsnAtentInfoList03"),
+    ("dur_pregnancy.csv",       "getPwnmTabooInfoList03"),
+    ("dur_age.csv",             "getSpcifyAgrdeTabooInfoList03"),
     ("dur_duplicate_class.csv", "getEfcyDplctInfoList03"),
-    ("dur_period.csv", "getMdctnPdAtentInfoList03"),
-    ("dur_dosage.csv", "getCpctyAtentInfoList03"),
+    ("dur_period.csv",          "getMdctnPdAtentInfoList03"),
+    ("dur_dosage.csv",          "getCpctyAtentInfoList03"),
 ]
 
 OK_CODES = {"00", "0", "NORMAL_CODE", "NORMAL SERVICE."}
@@ -87,7 +86,6 @@ async def _fetch_endpoint(
             return out
         code, msg, rows, total = _extract(payload)
         if code and code not in OK_CODES:
-            # data.go.kr 이 정상 200 + resultCode 에 에러 넘기는 패턴.
             print(f"  ! resultCode={code} msg={msg}", flush=True)
             return out
         if page == 1:
@@ -101,7 +99,6 @@ async def _fetch_endpoint(
 def _write_csv(path: Path, rows: list[dict]) -> None:
     fieldnames = sorted({k for r in rows for k in r.keys()})
     path.parent.mkdir(parents=True, exist_ok=True)
-    # 엑셀에서도 깨지지 않도록 utf-8-sig.
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -133,7 +130,7 @@ async def _amain() -> int:
     async with httpx.AsyncClient(timeout=timeout) as client:
         for idx, (filename, endpoint) in enumerate(ENDPOINTS, 1):
             print(
-                f"\n[{idx}/{len(ENDPOINTS)}] {filename}  ({endpoint})",
+                f"\n[{idx}/{len(ENDPOINTS)}] {filename} ({endpoint})",
                 flush=True,
             )
             rows = await _fetch_endpoint(client, filename, endpoint, key, encoded)

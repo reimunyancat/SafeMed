@@ -1,8 +1,3 @@
-"""SQLite key/value cache with namespace + TTL.
-
-Used by MFDSClient and any other adapter that wants to memoize API responses.
-The DB file is created lazily on first write.
-"""
 from __future__ import annotations
 
 import json
@@ -22,13 +17,14 @@ class Cache:
 
     def _init_schema(self) -> None:
         with self._conn() as c:
+            c.execute("PRAGMA journal_mode=WAL")
             c.execute(
                 """
                 CREATE TABLE IF NOT EXISTS kv (
                     namespace TEXT NOT NULL,
-                    key TEXT NOT NULL,
-                    value TEXT NOT NULL,
-                    ts REAL NOT NULL,
+                    key       TEXT NOT NULL,
+                    value     TEXT NOT NULL,
+                    ts        REAL NOT NULL,
                     PRIMARY KEY (namespace, key)
                 )
                 """
@@ -36,7 +32,7 @@ class Cache:
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
         try:
             yield conn
             conn.commit()
@@ -49,15 +45,15 @@ class Cache:
                 "SELECT value, ts FROM kv WHERE namespace=? AND key=?",
                 (namespace, key),
             ).fetchone()
-        if not row:
-            return None
-        value, ts = row
-        if time.time() - ts > self.ttl:
-            return None
-        try:
-            return json.loads(value)
-        except json.JSONDecodeError:
-            return None
+            if not row:
+                return None
+            value, ts = row
+            if time.time() - ts > self.ttl:
+                return None
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return None
 
     def set(self, namespace: str, key: str, value: Any) -> None:
         with self._conn() as c:

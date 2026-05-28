@@ -1,12 +1,14 @@
-"""Medicine search endpoint — proxies MFDS DrbEasyDrugInfoService."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.config import Settings, get_settings
-from app.core.errors import DataFetchError
+from app.core.errors import DataFetchError, DataParseError
 from app.data.cache import Cache
 from app.data.fetcher import MFDSClient
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -24,8 +26,19 @@ async def search_medicines(
     client = _get_client(settings)
     try:
         data = await client.search_drug(item_name=q, num_of_rows=10)
-    except DataFetchError:
-        return []
+    except DataFetchError as e:
+        log.warning("mfds_search_unavailable", q=q, error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="식약처 의약품 검색 서비스를 사용할 수 없어요. 잠시 후 다시 시도해주세요.",
+        ) from e
+    except DataParseError as e:
+        log.error("mfds_search_parse_error", q=q, error=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail="식약처 응답을 해석하지 못했어요. 관리자에게 문의해주세요.",
+        ) from e
+
     items = MFDSClient.parse_items(data)
     return [
         {

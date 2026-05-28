@@ -1,24 +1,3 @@
-"""Train the SafeMed GCN encoder on the MFDS contraindication graph.
-
-Run:
-    python -m app.ml.train \\
-        --combo-csv ../data/raw/dur_combo.csv \\
-        --out ../data/processed/gcn_embeddings.pt \\
-        --epochs 200
-
-This is unsupervised link prediction (Graph Autoencoder). On the public 540k
-pair CSV one epoch is ~2s on CPU and ~0.3s on a CUDA T4, so 200 epochs ~7min
-CPU / ~1min GPU. The script:
-
-1. Builds the drug graph + hashed-bigram node features (``graph_builder``).
-2. Splits edges into train/val/test using ``RandomLinkSplit``.
-3. Trains ``GAE(GCNEncoder)`` with negative sampling + recon_loss.
-4. Reports val/test ROC-AUC and AP at the end.
-5. Saves ``{ \"vocab\": {...}, \"embeddings\": Tensor[N, out_dim] }`` to disk.
-
-The saved file is what ``app.signal.gcn`` loads at runtime (path configurable
-via ``GCN_EMBEDDING_PATH`` env var).
-"""
 from __future__ import annotations
 
 import argparse
@@ -72,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError as e:
         sys.stderr.write(
             f"[train.py] Missing optional dependency: {e}.\n"
-            "Install with: pip install -e \".[ml]\"\n"
+            "Install with: uv --project backend sync --extra ml\n"
         )
         return 2
 
@@ -104,11 +83,18 @@ def main(argv: list[str] | None = None) -> int:
     val_data = val_data.to(device)
     test_data = test_data.to(device)
 
+    def _pos_neg(split) -> tuple[torch.Tensor, torch.Tensor]:
+        label = split.edge_label.bool()
+        pos = split.edge_label_index[:, label]
+        neg = split.edge_label_index[:, ~label]
+        return pos, neg
+
     def _train_epoch() -> float:
         model.train()
         optimizer.zero_grad()
         z = model.encode(train_data.x, train_data.edge_index)
-        loss = model.recon_loss(z, train_data.edge_label_index)
+        pos, _ = _pos_neg(train_data)
+        loss = model.recon_loss(z, pos)
         loss.backward()
         optimizer.step()
         return float(loss)
@@ -117,13 +103,8 @@ def main(argv: list[str] | None = None) -> int:
     def _eval(split) -> tuple[float, float]:
         model.eval()
         z = model.encode(split.x, split.edge_index)
-        return model.test(
-            z, split.edge_label_index, split.edge_label_index[:, :0]
-        ) if False else model.test(
-            z,
-            split.edge_label_index[:, split.edge_label.bool()],
-            split.edge_label_index[:, ~split.edge_label.bool()],
-        )
+        pos, neg = _pos_neg(split)
+        return model.test(z, pos, neg)
 
     print(f"[train] running {args.epochs} epochs on {device}")
     for epoch in range(1, args.epochs + 1):

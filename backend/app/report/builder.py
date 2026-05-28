@@ -1,4 +1,3 @@
-"""엔진 결과 → 응답 객체 변환 + 환자 안내 문구 생성."""
 from __future__ import annotations
 
 from app.rules.dur import RuleFinding
@@ -33,7 +32,6 @@ def to_risk_out(rb: RiskBreakdown) -> RiskOut:
 
 def cautions_from_findings(findings: list[RuleFinding]) -> list[str]:
     cautions: list[str] = []
-    # 같은 종류·같은 약 쌍이 여러 번 잡혀도 한 번만 안내한다.
     seen: set[tuple[str, str]] = set()
     for f in findings:
         key = (f.kind, f.drug_a_name + (f.drug_b_name or ""))
@@ -46,6 +44,10 @@ def cautions_from_findings(findings: list[RuleFinding]) -> list[str]:
             cautions.append(f"{f.drug_a_name}: 어르신께서는 주의가 필요해요.")
         elif f.kind == "pregnancy":
             cautions.append(f"{f.drug_a_name}: 임신 중에는 피하시는 게 좋아요.")
+        elif f.kind == "age":
+            cautions.append(
+                f"{f.drug_a_name}: 특정 연령대(주로 소아·청소년)에는 사용이 제한돼요."
+            )
         elif f.kind == "duplicate_class":
             cautions.append(f"{f.drug_a_name} + {f.drug_b_name}: 같은 계열이라 효과가 겹쳐요.")
         elif f.kind == "dosage":
@@ -54,11 +56,6 @@ def cautions_from_findings(findings: list[RuleFinding]) -> list[str]:
 
 
 def suggest_alternatives(findings: list[RuleFinding], band: str) -> list[str]:
-    """위험도·finding 종류별 대체 가이드.
-
-    실제 약 이름을 직접 추천하는 건 의약학적 판단이라 일반화된 방향만 제시한다.
-    UI 의 InteractionCard 하단에 옅게 표시할 용도.
-    """
     if not findings:
         return []
 
@@ -78,6 +75,8 @@ def suggest_alternatives(findings: list[RuleFinding], band: str) -> list[str]:
         msgs.append("임신·수유 중에는 안전 등급이 높은 대체제(예: 아세트아미노펜)가 우선 고려돼요.")
     if "elderly" in kinds:
         msgs.append("고령자에게는 항콜린성·진정 계열 약물 사용을 줄이는 게 권고됩니다.")
+    if "age" in kinds:
+        msgs.append("소아·청소년 금기 약물은 동일 효능군의 소아 허가 의약품으로 대체 가능한지 확인해 주세요.")
     if "dosage" in kinds:
         msgs.append("용량/투여기간 한도가 정해진 약은 자가 증량하지 말고 처방 그대로 복용해 주세요.")
     return msgs

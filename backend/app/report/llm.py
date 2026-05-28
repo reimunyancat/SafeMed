@@ -1,4 +1,3 @@
-"""LLM adapter — NVIDIA NIM primary, with upstage / ollama / none fallbacks."""
 from __future__ import annotations
 
 from typing import Any
@@ -35,8 +34,8 @@ async def _post_chat(
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             resp = await client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+            resp.raise_for_status()
+            data = resp.json()
     except httpx.HTTPError as e:
         log.warning("llm_request_failed", url=url, error=str(e))
         raise LLMUnavailableError(f"LLM request failed: {e}") from e
@@ -109,7 +108,7 @@ def fallback_template() -> str:
     """Returned when LLM is unreachable or disabled."""
     return (
         "**쉬운 요약**\n\n"
-        "약을 함께 드시기 전에 의사·약사 선생님께 꼭 여쥐보세요. "
+        "약을 함께 드시기 전에 의사·약사 선생님께 꼭 여쭤보세요. "
         "특히 위험 점수가 높은 조합은 다른 약으로 바꿀 수 있는지 상의하시는 게 안전해요.\n\n"
         "**자세한 설명**\n\n"
         "AI 요약 기능이 비활성화 상태라 자세한 설명을 자동 생성할 수 없어요. "

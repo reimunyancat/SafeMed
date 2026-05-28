@@ -150,5 +150,3 @@ report/output/
 docker-compose.override.yml
 *.pid
 *.sock
-
-docs/
