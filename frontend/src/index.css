@@ -17,11 +17,7 @@
     background: #f3f3f3;
     color: #252525;
     font-family:
-      Inter,
-      Pretendard,
-      'Apple SD Gothic Neo',
-      'Noto Sans KR',
-      system-ui,
+      Inter, Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui,
       sans-serif;
   }
 
@@ -77,45 +73,4 @@
 
 .large-text-mode {
   font-size: 112%;
-}
-
-.high-contrast-mode {
-  background: #050505;
-  color: #ffffff;
-}
-
-.high-contrast-mode .app-frame {
-  background: #050505;
-}
-
-.high-contrast-mode header,
-.high-contrast-mode article,
-.high-contrast-mode section > div,
-.high-contrast-mode footer {
-  border-color: #ffffff !important;
-}
-
-.high-contrast-mode .bg-white,
-.high-contrast-mode .bg-brand-surface,
-.high-contrast-mode .bg-orange-50,
-.high-contrast-mode .bg-green-50,
-.high-contrast-mode .bg-blue-50,
-.high-contrast-mode .bg-teal-50,
-.high-contrast-mode .bg-red-50 {
-  background-color: #111111 !important;
-}
-
-.high-contrast-mode .text-brand-ink,
-.high-contrast-mode .text-brand-muted {
-  color: #ffffff !important;
-}
-
-.high-contrast-mode .field-input {
-  background: #111111;
-  color: #ffffff;
-  border: 1px solid #ffffff;
-}
-
-.high-contrast-mode .field-input::placeholder {
-  color: #d8d8d8;
 }

@@ -4,7 +4,6 @@ import type { A11yState } from "../hooks/useAccessibility";
 interface Props {
   a11y: A11yState & {
     toggleLargeText: () => void;
-    toggleHighContrast: () => void;
   };
 }
 
@@ -16,15 +15,15 @@ export function Header({ a11y }: Props) {
           S
         </div>
         <div>
-          <div className="text-lg font-bold text-brand-ink leading-none">SafeMed</div>
+          <div className="text-lg font-bold text-brand-ink leading-none">
+            SafeMed
+          </div>
           <div className="text-xs text-brand-muted mt-0.5">세이프메드</div>
         </div>
       </div>
       <AccessibilityControls
         largeText={a11y.largeText}
-        highContrast={a11y.highContrast}
         onToggleLargeText={a11y.toggleLargeText}
-        onToggleHighContrast={a11y.toggleHighContrast}
       />
     </header>
   );
