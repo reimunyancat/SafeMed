@@ -1,4 +1,3 @@
-"""Pydantic v2 request/response schemas for /api/analyze."""
 from __future__ import annotations
 
 from typing import Literal

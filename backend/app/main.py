@@ -1,4 +1,3 @@
-"""SafeMed FastAPI entry point."""
 from __future__ import annotations
 
 from fastapi import FastAPI

@@ -1,20 +1,3 @@
-"""Build a PyTorch Geometric ``Data`` object from the MFDS contraindication CSV.
-
-The public file `병용금기약물.csv` from the Korea Institute of Drug Safety &
-Risk Management lists ~540k contraindicated ingredient pairs. We treat the
-ingredient set as nodes and contraindicated pairs as edges, then train a
-Graph Autoencoder so structurally similar ingredients land near each other in
-embedding space. Those embeddings are later used by ``app.signal.gcn`` to do
-\"similar ingredient\" lookups for the safety report.
-
-Usage:
-    >>> data, vocab = build_drug_graph(\"data/raw/dur_combo.csv\")
-    >>> data.num_nodes, data.num_edges, data.x.shape
-
-File format expected (case-insensitive header lookup):
-    성분코드A, 성분명A, 성분코드B, 성분명B
-Additional columns (e.g. 금기사유, ATC) are tolerated.
-"""
 from __future__ import annotations
 
 import hashlib
@@ -23,17 +6,17 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-if TYPE_CHECKING:  # pragma: no cover - typing only
+if TYPE_CHECKING: 
     import torch
     from torch_geometric.data import Data
 
-NODE_FEATURE_DIM = 64  # hashed bag-of-character features; replaced with ATC if available
+NODE_FEATURE_DIM = 64  
 
 _COLUMN_ALIASES = {
-    "ingredient_a_code": ["성분코드A", "성분코드_A", "ingredient_code_a", "ingr_code_a"],
-    "ingredient_a_name": ["성분명A", "성분명_A", "ingredient_a", "ingr_a"],
-    "ingredient_b_code": ["성분코드B", "성분코드_B", "ingredient_code_b", "ingr_code_b"],
-    "ingredient_b_name": ["성분명B", "성분명_B", "ingredient_b", "ingr_b"],
+    "ingredient_a_code": ["성분코드A", "성분코드_A", "ingredient_code_a", "ingr_code_a", "INGR_CODE"],
+    "ingredient_a_name": ["성분명A", "성분명_A", "ingredient_a", "ingr_a", "INGR_KOR_NAME", "INGR_ENG_NAME", "MAIN_INGR"],
+    "ingredient_b_code": ["성분코드B", "성분코드_B", "ingredient_code_b", "ingr_code_b", "MIXTURE_INGR_CODE"],
+    "ingredient_b_name": ["성분명B", "성분명_B", "ingredient_b", "ingr_b", "MIXTURE_INGR_KOR_NAME", "MIXTURE_INGR_ENG_NAME", "MIXTURE_MAIN_INGR"],
 }
 
 
@@ -73,12 +56,6 @@ def load_combo_pairs(csv_path: str | Path) -> pd.DataFrame:
 
 
 def _hash_features(token: str, dim: int = NODE_FEATURE_DIM) -> list[float]:
-    """Cheap deterministic node feature: hashed char-bigrams onto ``dim`` buckets.
-
-    Replace with ATC one-hot or RDKit descriptors when those are available;
-    GCN training works fine with the hashed init because the graph topology
-    carries most of the signal.
-    """
     feats = [0.0] * dim
     padded = f" {token} "
     for i in range(len(padded) - 1):
@@ -95,11 +72,6 @@ def _hash_features(token: str, dim: int = NODE_FEATURE_DIM) -> list[float]:
 def build_drug_graph(
     csv_path: str | Path,
 ) -> tuple["Data", dict[str, int]]:
-    """Read the combo CSV and emit a PyG ``Data`` graph plus the node vocab.
-
-    Importing torch lazily keeps the API package importable without the ``[ml]``
-    extras installed (relevant for the FastAPI runtime image).
-    """
     import torch
     from torch_geometric.data import Data
 
@@ -109,7 +81,6 @@ def build_drug_graph(
 
     src = df["ingredient_a"].map(vocab).to_numpy()
     dst = df["ingredient_b"].map(vocab).to_numpy()
-    # undirected: include both directions
     edge_index = torch.tensor(
         [list(src) + list(dst), list(dst) + list(src)], dtype=torch.long
     )
