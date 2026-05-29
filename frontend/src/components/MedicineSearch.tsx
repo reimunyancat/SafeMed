@@ -51,7 +51,7 @@ export function MedicineSearch({ onAdd, selected }: Props) {
         <input
           type="text"
           inputMode="search"
-          placeholder="예시) 타이레놀, 와파린"
+          placeholder="예시) 타이레놀, 아스피린"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(query.length > 0)}
@@ -99,7 +99,9 @@ export function MedicineSearch({ onAdd, selected }: Props) {
                     {it.itemName}
                   </div>
                   {it.entpName && (
-                    <div className="text-xs text-brand-muted mt-0.5">{it.entpName}</div>
+                    <div className="text-xs text-brand-muted mt-0.5">
+                      {it.entpName}
+                    </div>
                   )}
                 </button>
               );
