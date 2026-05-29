@@ -26,6 +26,7 @@ async def search_medicines(
     client = _get_client(settings)
     try:
         data = await client.search_drug(item_name=q, num_of_rows=10)
+        items = MFDSClient.parse_items(data)
     except DataFetchError as e:
         log.warning("mfds_search_unavailable", q=q, error=str(e))
         raise HTTPException(
@@ -39,7 +40,6 @@ async def search_medicines(
             detail="식약처 응답을 해석하지 못했어요. 관리자에게 문의해주세요.",
         ) from e
 
-    items = MFDSClient.parse_items(data)
     return [
         {
             "itemSeq": it.get("itemSeq", ""),

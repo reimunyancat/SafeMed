@@ -1,9 +1,3 @@
-"""MFDS DrbEasyDrugInfoService client.
-
-CRITICAL: when MFDS_KEY_IS_URL_ENCODED=true, the serviceKey is already encoded
-(contains %2F, %3D). It MUST be appended as a raw query-string segment so httpx
-doesn't re-encode it. Other params go through urlencode as usual.
-"""
 from __future__ import annotations
 
 from typing import Any
@@ -87,14 +81,32 @@ class MFDSClient:
 
     @staticmethod
     def parse_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
-        """Pull item list from MFDS response envelope, normalising the shape."""
-        try:
-            body = payload["response"]["body"]
-            items = body.get("items", [])
-            if isinstance(items, dict) and "item" in items:
-                items = items["item"]
-            if isinstance(items, dict):
-                items = [items]
-            return list(items) if items else []
-        except (KeyError, TypeError) as e:
-            raise DataParseError(f"Unexpected MFDS payload shape: {e}") from e
+        if isinstance(payload, dict) and "OpenAPI_ServiceResponse" in payload:
+            header = payload["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {})
+            msg = header.get("errMsg") or header.get("returnAuthMsg") or "Unknown"
+            code = header.get("returnReasonCode", "?")
+            raise DataFetchError(
+                f"MFDS API rejected request (code={code}): {msg}. "
+                "DrbEasyDrugInfoService 활용신청 상태를 확인하세요."
+            )
+
+        if not isinstance(payload, dict):
+            raise DataParseError(f"Unexpected MFDS payload type: {type(payload).__name__}")
+        envelope = payload.get("response", payload)
+        if not isinstance(envelope, dict):
+            raise DataParseError(f"Unexpected MFDS envelope type: {type(envelope).__name__}")
+
+        header = envelope.get("header", {})
+        result_code = header.get("resultCode")
+        if result_code is not None and result_code not in ("00", "0"):
+            raise DataFetchError(
+                f"MFDS API error: {header.get('resultMsg', header)} (code={result_code})"
+            )
+
+        body = envelope.get("body") or {}
+        items = body.get("items", [])
+        if isinstance(items, dict) and "item" in items:
+            items = items["item"]
+        if isinstance(items, dict):
+            items = [items]
+        return list(items) if items else []
