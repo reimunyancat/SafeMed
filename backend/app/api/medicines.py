@@ -1,22 +1,26 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.config import Settings, get_settings
 from app.core.errors import DataFetchError, DataParseError
 from app.data.cache import Cache
+from app.data.drug_resolver import get_resolver
 from app.data.fetcher import MFDSClient
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter()
 
+_PROJECT_DATA = Path(__file__).resolve().parents[2].parent / "data"
+_RAW_DIR = _PROJECT_DATA / "raw"
 
 def _get_client(settings: Settings) -> MFDSClient:
     cache = Cache(settings.cache_db_path, ttl_hours=settings.cache_ttl_hours)
     return MFDSClient(settings, cache=cache)
-
 
 @router.get("/medicines/search")
 async def search_medicines(
@@ -40,15 +44,20 @@ async def search_medicines(
             detail="식약처 응답을 해석하지 못했어요. 관리자에게 문의해주세요.",
         ) from e
 
-    return [
-        {
-            "itemSeq": it.get("itemSeq", ""),
-            "itemName": it.get("itemName", ""),
+    resolver = get_resolver(str(_RAW_DIR.resolve()))
+    enriched: list[dict] = []
+    for it in items:
+        item_seq = it.get("itemSeq", "")
+        item_name = it.get("itemName", "")
+        codes = sorted(resolver.resolve(item_seq, item_name))
+        enriched.append({
+            "itemSeq": item_seq,
+            "itemName": item_name,
             "entpName": it.get("entpName", ""),
             "efcyQesitm": it.get("efcyQesitm", ""),
             "useMethodQesitm": it.get("useMethodQesitm", ""),
             "atpnQesitm": it.get("atpnQesitm", ""),
             "intrcQesitm": it.get("intrcQesitm", ""),
-        }
-        for it in items
-    ]
+            "ingredientCodes": codes,
+        })
+    return enriched

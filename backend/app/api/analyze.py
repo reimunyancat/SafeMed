@@ -12,6 +12,7 @@ from app.data.ae_loader import (
     load_ae_reports,
 )
 from app.data.csv_loader import has_any_real_data, load_all
+from app.data.drug_resolver import get_resolver
 from app.report import (
     call_llm,
     cautions_from_findings,
@@ -23,6 +24,7 @@ from app.report import (
 )
 from app.report.prompts import build_system_prompt, build_user_prompt
 from app.rules import run_rules
+from app.rules.types import DrugRef
 from app.schemas import AnalyzeRequest, AnalyzeResponse
 from app.signal import compute_risk, score_drugs
 
@@ -30,7 +32,6 @@ router = APIRouter()
 
 _PROJECT_DATA = Path(__file__).resolve().parents[2].parent / "data"
 _RAW_DIR = _PROJECT_DATA / "raw"
-
 
 def _get_dur_data() -> dict:
     data = load_all(_RAW_DIR)
@@ -44,19 +45,31 @@ def _get_dur_data() -> dict:
         )
     return data
 
+def _build_drug_refs(req: AnalyzeRequest) -> list[DrugRef]:
+    resolver = get_resolver(str(_RAW_DIR.resolve()))
+    refs: list[DrugRef] = []
+    for d in req.drugs:
+        codes = set(d.ingredient_codes) if d.ingredient_codes else set()
+        if not codes:
+            codes = resolver.resolve(d.item_seq, d.item_name)
+        refs.append(DrugRef(
+            item_seq=d.item_seq,
+            item_name=d.item_name,
+            ingredient_codes=frozenset(codes),
+        ))
+    return refs
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(
     req: AnalyzeRequest,
     settings: Settings = Depends(get_settings),
 ) -> AnalyzeResponse:
-    item_seqs = [d.item_seq for d in req.drugs]
-    item_names = {d.item_seq: d.item_name for d in req.drugs}
+    drug_refs = _build_drug_refs(req)
+    item_seqs = [d.item_seq for d in drug_refs]
 
     dur_data = _get_dur_data()
     findings = run_rules(
-        item_seqs,
-        item_names,
+        drug_refs,
         dur_data,
         is_elderly=req.profile.is_elderly,
         is_pregnant=req.profile.is_pregnant,
@@ -66,7 +79,7 @@ async def analyze(
     prr_results = build_prr_for_drugs(item_seqs, ae_df)
     ae_freq = ae_frequency_score(item_seqs, ae_df)
 
-    gcn_scores = score_drugs(item_seqs)
+    gcn_scores = score_drugs(drug_refs)
     risk = compute_risk(
         findings,
         prr_results=prr_results,

@@ -87,6 +87,7 @@ export function MedicineSearch({ onAdd, selected }: Props) {
                       use_method: it.useMethodQesitm,
                       caution: it.atpnQesitm,
                       interaction: it.intrcQesitm,
+                      ingredient_codes: it.ingredientCodes,
                     });
                     setQuery("");
                     setOpen(false);

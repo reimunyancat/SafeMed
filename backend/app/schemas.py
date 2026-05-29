@@ -11,6 +11,10 @@ Band = Literal["green", "yellow", "red"]
 class DrugInput(BaseModel):
     item_seq: str = Field(..., description="MFDS item_seq")
     item_name: str = Field(..., description="Display name")
+    ingredient_codes: list[str] = Field(
+        default_factory=list,
+        description="DUR 매칭용 성분코드. medicines/search 가 채워줌; 비면 서버가 재해석.",
+    )
 
 
 class ProfileInput(BaseModel):

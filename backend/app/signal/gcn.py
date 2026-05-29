@@ -46,65 +46,85 @@ def _load_embeddings() -> tuple[dict[str, int], object] | None:
     return bundle["vocab"], bundle["embeddings"]
 
 
-def _embedding_boost(drugs: list[str]) -> dict[str, float]:
-    """Per-drug boost in [0, 1] from cosine similarity within the regimen."""
+def _embedding_boost(drugs: list) -> dict[str, float]:
+    """Per-drug boost in [0, 1]. DrugRef.ingredient_codes 를 vocab(성분코드 키) 에 lookup."""
+    from app.rules.types import DrugRef
+    out: dict[str, float] = {}
+    for d in drugs:
+        did = d.item_seq if isinstance(d, DrugRef) else str(d)
+        out[did] = 0.0
     bundle = _load_embeddings()
-    if bundle is None:
-        return {d: 0.0 for d in drugs}
+    if bundle is None or len(drugs) < 2:
+        return out
     vocab, embeddings = bundle
     try:
-        import torch
+        import torch  # noqa: F401
     except ImportError:
-        return {d: 0.0 for d in drugs}
+        return out
 
-    present = {d: vocab[d] for d in drugs if d in vocab}
-    if len(present) < 2:
-        return {d: 0.0 for d in drugs}
+    drug_idxs: list[tuple[str, list[int]]] = []
+    for d in drugs:
+        if isinstance(d, DrugRef):
+            did = d.item_seq
+            idxs = [vocab[c] for c in d.ingredient_codes if c in vocab]
+        else:
+            did = str(d)
+            idxs = [vocab[did]] if did in vocab else []
+        if idxs:
+            drug_idxs.append((did, idxs))
+
+    if len(drug_idxs) < 2:
+        return out
 
     norms = embeddings.norm(dim=1).clamp(min=1e-9)
-    boosts: dict[str, float] = {d: 0.0 for d in drugs}
-    items = list(present.items())
-    for i, (drug_a, idx_a) in enumerate(items):
-        for drug_b, idx_b in items[i + 1 :]:
-            sim = float(
-                (embeddings[idx_a] @ embeddings[idx_b])
-                / (norms[idx_a] * norms[idx_b])
-            )
-            contribution = max(0.0, sim) ** 2
-            boosts[drug_a] = max(boosts[drug_a], contribution)
-            boosts[drug_b] = max(boosts[drug_b], contribution)
-    return boosts
+    for i, (drug_a, idxs_a) in enumerate(drug_idxs):
+        for drug_b, idxs_b in drug_idxs[i + 1:]:
+            best_sim = 0.0
+            for ia in idxs_a:
+                for ib in idxs_b:
+                    sim = float(
+                        (embeddings[ia] @ embeddings[ib])
+                        / (norms[ia] * norms[ib])
+                    )
+                    if sim > best_sim:
+                        best_sim = sim
+            contribution = max(0.0, best_sim) ** 2
+            out[drug_a] = max(out[drug_a], contribution)
+            out[drug_b] = max(out[drug_b], contribution)
+    return out
 
 
 def score_drugs(
-    drugs: list[str], reference_graph: nx.Graph | None = None
+    drugs: list,
+    reference_graph: nx.Graph | None = None,
 ) -> list[GCNScore]:
+    """drugs 는 list[DrugRef] 또는 list[str]. DrugRef 면 ingredient_codes 로 vocab lookup."""
+    from app.rules.types import DrugRef
     if not drugs:
         return []
-    g = build_clique(drugs)
+    ids = [d.item_seq if isinstance(d, DrugRef) else str(d) for d in drugs]
+    g = build_clique(ids)
     if reference_graph is not None:
         for u, v in g.edges():
             if reference_graph.has_edge(u, v):
-                g[u][v]["weight"] = float(
-                    reference_graph[u][v].get("weight", 1.0)
-                )
+                g[u][v]["weight"] = float(reference_graph[u][v].get("weight", 1.0))
 
-    if len(drugs) == 1:
-        return [GCNScore(drug=drugs[0], centrality=0.0, risk_amplifier=0.0)]
+    if len(ids) == 1:
+        return [GCNScore(drug=ids[0], centrality=0.0, risk_amplifier=0.0)]
 
     centrality = nx.degree_centrality(g)
-    n = len(drugs)
-    amp_base = min(1.0, (n - 1) / 6.0) 
+    n = len(ids)
+    amp_base = min(1.0, (n - 1) / 6.0)
     boosts = _embedding_boost(drugs)
     out: list[GCNScore] = []
-    for d in drugs:
-        base = float(amp_base * centrality[d])
-        boost = float(boosts.get(d, 0.0))
+    for d, did in zip(drugs, ids, strict=True):
+        base = float(amp_base * centrality[did])
+        boost = float(boosts.get(did, 0.0))
         combined = min(1.0, base * (1.0 + 0.5 * boost))
         out.append(
             GCNScore(
-                drug=d,
-                centrality=float(centrality[d]),
+                drug=did,
+                centrality=float(centrality[did]),
                 risk_amplifier=combined,
                 embedding_boost=boost,
             )

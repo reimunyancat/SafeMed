@@ -9,6 +9,7 @@ export interface Drug {
   use_method?: string;
   caution?: string;
   interaction?: string;
+  ingredient_codes?: string[];
 }
 
 export interface Profile {
@@ -52,4 +53,5 @@ export interface MfdsItem {
   useMethodQesitm?: string;
   atpnQesitm?: string;
   intrcQesitm?: string;
+  ingredientCodes?: string[];
 }

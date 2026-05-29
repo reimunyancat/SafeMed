@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -30,7 +31,6 @@ EXPECTED_COLUMNS: dict[DurType, list[str]] = {
 }
 
 KIDS_HEADER_ALIASES: dict[str, str] = {
-    # 한글 헤더 (KIDS 원본)
     "품목일련번호": "item_seq",
     "제품명": "item_name",
     "성분코드": "ingredient_code",
@@ -70,6 +70,7 @@ KIDS_HEADER_ALIASES: dict[str, str] = {
     "MAX_DOSAGE_UNIT": "unit",
     "MAX_PERIOD": "max_days",
     "MAX_QTY_DESC": "caution_content",
+    "MIXTURE_INGR_CODE": "ingredient_code_b",
 }
 
 DUR_FILES: dict[DurType, list[str]] = {
@@ -88,7 +89,18 @@ DUR_FILES: dict[DurType, list[str]] = {
 
 def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     renamed = {c: KIDS_HEADER_ALIASES.get(c.strip(), c) for c in df.columns}
-    return df.rename(columns=renamed)
+    df = df.rename(columns=renamed)
+    if not df.columns.duplicated().any():
+        return df
+    merged: dict[str, pd.Series] = {}
+    for name in pd.unique(df.columns):
+        sub = df.loc[:, df.columns == name]
+        if sub.shape[1] == 1:
+            merged[name] = sub.iloc[:, 0]
+        else:
+            filled = sub.replace("", pd.NA).bfill(axis=1).iloc[:, 0]
+            merged[name] = filled.fillna("")
+    return pd.DataFrame(merged)
 
 
 def _resolve(file_dir: Path, dur_type: DurType) -> Path | None:
@@ -118,6 +130,15 @@ def load_dur_csv(file_dir: str | Path, dur_type: DurType) -> pd.DataFrame:
 
     df = _normalise_columns(df).fillna("")
     df = df.dropna(how="all")
+
+    # combo 전용: ingredient_code (A 측) → ingredient_code_a 로 분리
+    if (
+        dur_type == "combo"
+        and "ingredient_code" in df.columns
+        and "ingredient_code_a" not in df.columns
+    ):
+        df = df.rename(columns={"ingredient_code": "ingredient_code_a"})
+
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str).str.strip()
     return df
@@ -128,9 +149,14 @@ def resolve_raw_dir(default: str | Path = "data/raw") -> Path:
     return Path(raw_env) if raw_env else Path(default)
 
 
+@lru_cache(maxsize=4)
+def _load_all_cached(raw_dir_str: str) -> dict[DurType, pd.DataFrame]:
+    raw = Path(raw_dir_str)
+    return {dur_type: load_dur_csv(raw, dur_type) for dur_type in DUR_FILES}
+
 def load_all(raw_dir: str | Path) -> dict[DurType, pd.DataFrame]:
     raw_dir = resolve_raw_dir(raw_dir)
-    return {dur_type: load_dur_csv(raw_dir, dur_type) for dur_type in DUR_FILES}
+    return _load_all_cached(str(raw_dir.resolve()))
 
 
 def has_any_real_data(data: dict[DurType, pd.DataFrame]) -> bool:

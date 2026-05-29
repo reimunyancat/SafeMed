@@ -10,7 +10,11 @@ export async function analyzeRequest(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      drugs: drugs.map((d) => ({ item_seq: d.item_seq, item_name: d.item_name })),
+      drugs: drugs.map((d) => ({
+        item_seq: d.item_seq,
+        item_name: d.item_name,
+        ingredient_codes: d.ingredient_codes ?? [],
+      })),
       profile,
     }),
   });
